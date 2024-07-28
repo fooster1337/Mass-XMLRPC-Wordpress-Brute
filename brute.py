@@ -180,7 +180,10 @@ class Brute:
             self.failed(e)
 
     def save_content(self, files, content):
-        open(files, "a+", encoding="utf8").write(content+"\n")
+        with open(files, "a+", encoding="utf8") as f:
+            f.write(content + "\n")
+            f.close()
+        # open(files, "a+", encoding="utf8").write(content+"\n")
 
     def bruteWpLogin(self, username: str, password: list) -> bool:
         headers = {
